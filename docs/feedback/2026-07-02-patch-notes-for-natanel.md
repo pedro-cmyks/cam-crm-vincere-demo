@@ -1,6 +1,6 @@
 # Patch Notes → for the DB/deployment implementation (2026-07-02)
 
-Hi Natanel — we updated the **GitHub repo** with a first batch of UI and
+Hi — we updated the **GitHub repo** with a first batch of UI and
 data-model changes. Since you run your diff against the Supabase-connected repo,
 this note explains **what changed and where** so you can port it. The GitHub repo
 is up to date; you can pull/diff from there. Full context lives in
