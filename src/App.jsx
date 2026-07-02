@@ -8,12 +8,20 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Copy,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   FileText,
+  Globe,
+  KeyRound,
   Lock,
   LogOut,
+  Mail,
+  MessageCircle,
+  Phone,
   Plus,
   RefreshCw,
   Shield,
@@ -2576,7 +2584,7 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
   const latestRegistry = mergeRegistryCi(dailyImport?.accounts, client?.accountRegistry);
 
   const profile = client.profile || {};
-  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.propFirm || profile.preferredChannel || profile.country;
+  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.preferredChannel || profile.country;
   const waLink = profile.phone ? `https://wa.me/${profile.phone.replace(/\D/g, '')}` : null;
 
   return (
@@ -2584,14 +2592,13 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
       {hasContact && (
         <section className="contact-card">
           {profile.fullName && <strong className="contact-name">{profile.fullName}</strong>}
-          {profile.email && <a href={`mailto:${profile.email}`} className="contact-chip"><span>✉</span>{profile.email}</a>}
-          {profile.phone && <a href={waLink || `tel:${profile.phone}`} target="_blank" rel="noreferrer" className="contact-chip"><span>{waLink ? '📱' : '📞'}</span>{profile.phone}</a>}
-          {profile.messenger && <span className="contact-chip"><span>💬</span>{profile.messenger}</span>}
-          {profile.timezone && <span className="contact-chip muted"><span>🕐</span>{profile.timezone}</span>}
-          {profile.propFirm && <span className="contact-chip muted"><span>🏢</span>{profile.propFirm}</span>}
-          {profile.preferredChannel && <span className="contact-chip muted"><span>💬</span>{profile.preferredChannel}</span>}
-          {profile.country && <span className="contact-chip muted"><span>🌎</span>{profile.country}</span>}
-          {profile.language && <span className="contact-chip muted"><span>🌐</span>{{en:'English',es:'Español'}[profile.language]||profile.language}</span>}
+          {profile.email && <a href={`mailto:${profile.email}`} className="contact-chip"><Mail size={13} />{profile.email}</a>}
+          {profile.phone && <a href={waLink || `tel:${profile.phone}`} target="_blank" rel="noreferrer" className="contact-chip"><Phone size={13} />{profile.phone}</a>}
+          {profile.messenger && <span className="contact-chip"><MessageCircle size={13} />{profile.messenger}</span>}
+          {profile.timezone && <span className="contact-chip muted"><Clock size={13} />{profile.timezone}</span>}
+          {profile.preferredChannel && <span className="contact-chip muted"><MessageCircle size={13} />{profile.preferredChannel}</span>}
+          {profile.country && <span className="contact-chip muted"><Globe size={13} />{profile.country}</span>}
+          {profile.language && <span className="contact-chip muted"><Globe size={13} />{{en:'English',es:'Español'}[profile.language]||profile.language}</span>}
           {profile.stage && profile.stage !== 'Active' && <span className={`client-stage-badge stage-${profile.stage?.toLowerCase().replace(/\s+/g, '-')}`}>{profile.stage}</span>}
         </section>
       )}
@@ -4200,16 +4207,57 @@ function CopyButton({ value }) {
   );
 }
 
+const TIMEZONE_OPTIONS = [
+  'EST (America/New_York)',
+  'CST (America/Chicago)',
+  'MST (America/Denver)',
+  'PST (America/Los_Angeles)',
+  'AKST (America/Anchorage)',
+  'HST (Pacific/Honolulu)',
+  'GMT/UTC (Europe/London)',
+  'CET (Europe/Madrid)',
+  'COT (America/Bogota)',
+];
+
+const COUNTRY_OPTIONS = [
+  'United States', 'Canada', 'Mexico', 'Colombia', 'United Kingdom',
+  'Spain', 'Germany', 'France', 'Italy', 'Brazil', 'Argentina', 'Australia',
+  'India', 'Philippines', 'Nigeria', 'South Africa', 'Other',
+];
+
+const PROP_FIRM_CONNECTIONS = ['Tradovate', 'Rithmic'];
+
 function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
+  const propFirms = client.propFirms || [];
+  const additionalEmails = profile.additionalEmails || [];
   const [showPasswords, setShowPasswords] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
 
   function updateProfile(patch) {
     onUpdateClient({ profile: { ...profile, ...patch } });
   }
   function updateCredentials(patch) {
     onUpdateClient({ credentials: { ...credentials, ...patch } });
+  }
+  function addEmail() {
+    const value = newEmail.trim();
+    if (!value || additionalEmails.includes(value) || value === profile.email) { setNewEmail(''); return; }
+    updateProfile({ additionalEmails: [...additionalEmails, value] });
+    setNewEmail('');
+  }
+  function removeEmail(email) {
+    updateProfile({ additionalEmails: additionalEmails.filter((e) => e !== email) });
+  }
+  function addPropFirm() {
+    onUpdateClient({ propFirms: [...propFirms, { id: `pf-${Date.now()}`, connection: 'Tradovate', login: '', password: '' }] });
+  }
+  function updatePropFirm(id, patch) {
+    onUpdateClient({ propFirms: propFirms.map((pf) => (pf.id === id ? { ...pf, ...patch } : pf)) });
+  }
+  function removePropFirm(id) {
+    onUpdateClient({ propFirms: propFirms.filter((pf) => pf.id !== id) });
   }
 
   return (
@@ -4221,23 +4269,49 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
           <label>Email
             <div className="input-copy-row">
               <input type="email" value={profile.email || ''} placeholder="client@email.com" onChange={(e) => updateProfile({ email: e.target.value })} />
-              {profile.email && <a className="ghost-button icon-only" href={`mailto:${profile.email}`} title="Send email" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>✉</a>}
+              {profile.email && <a className="ghost-button icon-only" href={`mailto:${profile.email}`} title="Send email" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}><Mail size={14} /></a>}
               <CopyButton value={profile.email} />
             </div>
+          </label>
+          <label>Additional emails
+            <div className="input-copy-row">
+              <input type="email" value={newEmail} placeholder="Add another email" onChange={(e) => setNewEmail(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmail(); } }} />
+              <button type="button" className="ghost-button icon-only" title="Add email" style={{display:'flex',alignItems:'center',padding:'0 6px'}} onClick={addEmail}><Plus size={14} /></button>
+            </div>
+            {additionalEmails.length > 0 && (
+              <div className="email-chips" style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+                {additionalEmails.map((email) => (
+                  <span key={email} className="badge muted" style={{display:'inline-flex',alignItems:'center',gap:4}}>
+                    {email}
+                    <button type="button" className="ghost-button icon-only" title="Remove" style={{padding:0,lineHeight:0}} onClick={() => removeEmail(email)}><Trash2 size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
           </label>
           <label>Phone
             <div className="input-copy-row">
               <input type="tel" value={profile.phone || ''} placeholder="+1 (555) 000-0000" onChange={(e) => updateProfile({ phone: e.target.value })} />
-              {profile.phone && <a className="ghost-button icon-only" href={`tel:${profile.phone}`} title="Call" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>📞</a>}
+              {profile.phone && <a className="ghost-button icon-only" href={`tel:${profile.phone}`} title="Call" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}><Phone size={14} /></a>}
               <CopyButton value={profile.phone} />
             </div>
           </label>
-          <label>Time zone<input value={profile.timezone || ''} placeholder="e.g. America/New_York" onChange={(e) => updateProfile({ timezone: e.target.value })} /></label>
-          <label>Prop firm<input value={profile.propFirm || ''} placeholder="e.g. Apex, TopStep, FTMO" onChange={(e) => updateProfile({ propFirm: e.target.value })} /></label>
-          <label>Discord / Telegram
+          <label>Time zone
+            <select value={profile.timezone || ''} onChange={(e) => updateProfile({ timezone: e.target.value })}>
+              <option value="">— Select —</option>
+              {TIMEZONE_OPTIONS.map((tz) => <option key={tz}>{tz}</option>)}
+            </select>
+          </label>
+          <label>Discord username
             <div className="input-copy-row">
-              <input value={profile.messenger || ''} placeholder="Handle or username" onChange={(e) => updateProfile({ messenger: e.target.value })} />
+              <input value={profile.messenger || ''} placeholder="Discord username" onChange={(e) => updateProfile({ messenger: e.target.value })} />
               <CopyButton value={profile.messenger} />
+            </div>
+          </label>
+          <label>Product key
+            <div className="input-copy-row">
+              <input value={profile.productKey || ''} placeholder="NinjaTrader product key" onChange={(e) => updateProfile({ productKey: e.target.value })} />
+              <CopyButton value={profile.productKey} />
             </div>
           </label>
           <label>Client stage
@@ -4253,7 +4327,6 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
             <select value={profile.preferredChannel || ''} onChange={(e) => updateProfile({ preferredChannel: e.target.value })}>
               <option value="">— Not set —</option>
               <option>WhatsApp</option>
-              <option>Telegram</option>
               <option>Email</option>
               <option>Discord</option>
               <option>Other</option>
@@ -4266,7 +4339,12 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
               <option value="es">Español</option>
             </select>
           </label>
-          <label>Country<input value={profile.country || ''} placeholder="e.g. Colombia, USA" onChange={(e) => updateProfile({ country: e.target.value })} /></label>
+          <label>Country
+            <input list="country-options" value={profile.country || ''} placeholder="Start typing…" onChange={(e) => updateProfile({ country: e.target.value })} />
+            <datalist id="country-options">
+              {COUNTRY_OPTIONS.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </label>
           <label>Start date<input type="date" value={profile.startDate || ''} onChange={(e) => updateProfile({ startDate: e.target.value })} /></label>
         </div>
       </section>
@@ -4274,18 +4352,42 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
       <section className="panel">
         <div className="panel-heading">
           <h3>VPS / Platform access</h3><Lock size={16} />
-          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12}} onClick={() => setShowPasswords(v => !v)}>
-            {showPasswords ? '🙈 Hide passwords' : '👁 Show passwords'}
+          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12,display:'inline-flex',alignItems:'center',gap:4}} onClick={() => setShowPasswords(v => !v)}>
+            {showPasswords ? <><EyeOff size={14} /> Hide passwords</> : <><Eye size={14} /> Show passwords</>}
           </button>
         </div>
         <div className="form-grid">
           <label>VPS IP<div className="input-copy-row"><input value={credentials.ip || ''} onChange={(e) => updateCredentials({ ip: e.target.value })} /><CopyButton value={credentials.ip} /></div></label>
-          <label>Username<div className="input-copy-row"><input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /><CopyButton value={credentials.username} /></div></label>
-          <label>Password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /><CopyButton value={credentials.password} /></div></label>
-          <label>NT login<div className="input-copy-row"><input value={credentials.ntLogin || ''} placeholder="NinjaTrader username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /><CopyButton value={credentials.ntLogin} /></div></label>
-          <label>Prop firm login<div className="input-copy-row"><input value={credentials.firmLogin || ''} placeholder="Dashboard login email" onChange={(e) => updateCredentials({ firmLogin: e.target.value })} /><CopyButton value={credentials.firmLogin} /></div></label>
-          <label>Prop firm password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /><CopyButton value={credentials.firmPassword} /></div></label>
+          <label>VPS username<div className="input-copy-row"><input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /><CopyButton value={credentials.username} /></div></label>
+          <label>VPS password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /><CopyButton value={credentials.password} /></div></label>
+          <label>NinjaTrader username<div className="input-copy-row"><input value={credentials.ntLogin || ''} placeholder="NT8 username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /><CopyButton value={credentials.ntLogin} /></div></label>
+          <label>NinjaTrader password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.ntPassword || ''} placeholder="NT8 password" onChange={(e) => updateCredentials({ ntPassword: e.target.value })} /><CopyButton value={credentials.ntPassword} /></div></label>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Prop firms</h3><KeyRound size={16} />
+          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12,display:'inline-flex',alignItems:'center',gap:4}} onClick={addPropFirm}><Plus size={14} /> Add prop firm</button>
+        </div>
+        {propFirms.length === 0 ? (
+          <p className="muted" style={{padding:'4px 0',fontSize:13}}>No prop firms yet. A client can have multiple — add one to store its connection type and login.</p>
+        ) : (
+          <div className="prop-firm-list" style={{display:'flex',flexDirection:'column',gap:12}}>
+            {propFirms.map((pf) => (
+              <div key={pf.id} className="prop-firm-row form-grid" style={{alignItems:'end'}}>
+                <label>Connection
+                  <select value={pf.connection || 'Tradovate'} onChange={(e) => updatePropFirm(pf.id, { connection: e.target.value })}>
+                    {PROP_FIRM_CONNECTIONS.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label>Login<div className="input-copy-row"><input value={pf.login || ''} placeholder="Prop firm login / email" onChange={(e) => updatePropFirm(pf.id, { login: e.target.value })} /><CopyButton value={pf.login} /></div></label>
+                <label>Password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={pf.password || ''} onChange={(e) => updatePropFirm(pf.id, { password: e.target.value })} /><CopyButton value={pf.password} /></div></label>
+                <button className="ghost-button icon-only" title="Remove prop firm" style={{display:'flex',alignItems:'center',padding:'0 6px'}} onClick={() => removePropFirm(pf.id)}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="panel">
