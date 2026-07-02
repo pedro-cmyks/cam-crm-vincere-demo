@@ -215,9 +215,12 @@ exported, and could a Python script on the machine export what we need
 automatically? Value: with historical data we could compare different clients'
 histories for the same algos — much richer analytics.
 
-> Findings are compiled in a companion file:
-> `docs/feedback/2026-07-02-ninjatrader-data-research.md` (added when research
-> completes).
+> Findings are compiled in the companion file:
+> [`docs/feedback/2026-07-02-ninjatrader-data-research.md`](./2026-07-02-ninjatrader-data-research.md).
+> Short version: account/execution data is easy to pull (NT stores it in a local
+> **SQLite** DB readable from Python); historical price `.ncd` files are
+> proprietary and hard; the officially-supported export path is a small
+> **NinjaScript** that writes CSV.
 
 This is a separate development track, not part of the immediate UI fixes.
 
