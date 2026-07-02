@@ -96,6 +96,10 @@ From the manager review, the larger items:
   backlog, enable create/delete for everyone temporarily.
 - **Manager portal:** client-lifecycle + per-CAM performance metrics (the new
   data focus — using our multi-client "lab" to compare algos across clients).
+  Full concept in [`2026-07-02-manager-review.md` §1](./2026-07-02-manager-review.md#1-manager-portal--lifecycle--performance-focus-new-concept):
+  lifecycle funnel (intake → onboarding → evaluation → funded → payout → churn),
+  per-CAM scorecard (days-to-funded, days-to-payout, pass rate, avg PnL), and
+  the `start date` field as the lifecycle anchor.
 
 ## NinjaTrader
 

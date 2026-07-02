@@ -5,6 +5,11 @@ Structured feedback captured while reviewing the deployed app
 area so the company developer (Natanel) can implement and version each change
 clearly.
 
+> **Companion docs:** implementation hand-off in
+> [`2026-07-02-patch-notes-for-natanel.md`](./2026-07-02-patch-notes-for-natanel.md)
+> (what changed / where + the reported deployed-build bug); NinjaTrader R&D in
+> [`2026-07-02-ninjatrader-data-research.md`](./2026-07-02-ninjatrader-data-research.md).
+
 ---
 
 ## 0. Blocker to resolve first — source of truth / repo divergence
