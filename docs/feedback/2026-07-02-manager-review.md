@@ -101,6 +101,7 @@ A client can have **multiple prop firms**. The prop-firm data belongs here (VPS
 / platform access), not in the profile. Each prop firm entry needs:
 
 - **Prop firm connection type toggle: Tradovate vs Rithmic** (only these two).
+- The prop firm name  
 - The prop-firm login/credentials for that connection.
 - Ability to **add multiple** prop firm entries per client.
 
