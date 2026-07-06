@@ -1183,7 +1183,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     if (!newUser.username || !newUser.password || !newUser.displayName) return;
     const isDuplicate = (users || []).some(u => u.username?.toLowerCase() === newUser.username.toLowerCase());
     if (isDuplicate) { alert(`Username "${newUser.username}" is already taken. Choose a different username.`); return; }
-    onUsersChange(addUser(users, newUser));
+    if (newUser.role === USER_ROLES.CAM && !newUser.camProfileId) {
+      // No profile picked for a CAM: auto-create one (named after the user) so the
+      // new CAM gets their own client roster and shows up in the sidebar/overview.
+      onCreateCam(newUser.displayName.trim(), newUser.username.trim(), newUser.password, { email: newUser.email });
+    } else {
+      onUsersChange(addUser(users, newUser));
+    }
     setNewUser({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
   }
 
@@ -4964,15 +4970,15 @@ export default function App() {
         camProfiles={state.camProfiles}
         onOpenCam={openCamWorkspace}
         onLoadDemo={() => setState(createDemoState())}
-        onCreateCam={(name, username, password) => {
+        onCreateCam={(name, username, password, extra = {}) => {
           const profileId = `am-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
           setState((current) => {
-            const profile = { id: profileId, name, status: 'Active', role: 'Account Manager', clientIds: [] };
+            const profile = { id: profileId, name, status: 'Active', role: 'CAM', live: true, clientIds: [] };
             return { ...current, camProfiles: [...(current.camProfiles || []), profile] };
           });
           if (username && password) {
             const already = (users || []).find(u => u.username?.toLowerCase() === username.toLowerCase());
-            if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, camProfileId: profileId }));
+            if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, ...extra, camProfileId: profileId }));
           }
         }}
         onLogout={() => persistSession(null)}

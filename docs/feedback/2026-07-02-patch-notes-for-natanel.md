@@ -79,8 +79,25 @@ Files touched: `src/App.jsx` (CredentialsTab + contact card),
   message templates) — those are client-facing messages where emoji are expected.
   A handful of other in-app button emojis remain and can be swept next.
 
-**Verification:** `npm test` → 334 passing; `vite build` clean; no new lint errors
-(50 baseline = 50 after).
+### 6. Users & Access — auto-create CAM profile when adding a CAM user
+**Problem reported (deployed build):** the "Add user" form only lets you pick an
+**existing** CAM profile, so a brand-new CAM can't get their own profile and
+never shows up in the sidebar / CAM overview.
+
+**Clarification — keep the CAM profile, it is not redundant with the role:**
+- `role` (Manager / CAM) = **permissions**.
+- `cam_profiles` = the CAM's **identity that owns a client roster**
+  (clients attach to a profile via `client_assignments` in the ERD; the sidebar,
+  CAM overview, performance metrics, payout pipeline all key off it).
+
+**Fix (reference):** when creating a user with role **CAM and no profile
+selected**, auto-create a `cam_profile` named after the user and link it
+(`users.cam_profile_id`). Now every new CAM immediately has a roster and appears
+correctly. (`submitNewUser` → routes through the CAM-creation path; the profile
+role is normalized to `CAM`.) A "+ New profile" option in the dropdown would work
+too. **Do not drop the CAM-profile concept** — it's in the agreed schema.
+
+**Verification:** `npm test` → 334 passing; `vite build` clean; no new lint errors.
 
 ---
 
