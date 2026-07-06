@@ -61,6 +61,31 @@ The `client.propFirms[]` shape gained a **`name`** field (e.g. Apex, TopStep)
 alongside `connection` (`Tradovate` | `Rithmic`), `login`, `password`. So the
 full shape is `{ id, name, connection, login, password }`.
 
+## 5. Unassigned clients — auto-unassign on CAM delete + manager flag
+
+When a CAM is deleted (employee no longer working), their clients now
+**immediately become unassigned** (they belong to no CAM). To make that
+followable:
+
+- The **Manager Operations view shows a red banner**: "N clients unassigned — no
+  CAM assigned. Reassign in the Client roster below," with the client names.
+  Implemented in `ManagerOverview` (`unassignedClients` memo + banner).
+- The existing **Client roster** already lists each client's CAM (or
+  `Unassigned`) and lets the manager reassign via the dropdown — that's where
+  they clear the backlog.
+
+**DB:** `client_assignments` should simply have no row for an unassigned client
+(or `cam_profile_id = NULL`). The manager flag = count of clients with no active
+assignment.
+
+## 6. Bug to validate (deployed build) — unassigned clients throw a DB error
+
+When a client lands in the **Unassigned** bucket (no CAM), the deployed app
+reports a **database error**. Unassigned must be a **valid state**, not an error:
+make `clients.cam_profile_id` / the `client_assignments` link **nullable**, and
+make sure list/join queries handle a missing CAM (LEFT JOIN, null-safe) instead
+of failing. Please validate how clients with no CAM are connected.
+
 ---
 
 ## Summary of the model (for reference)

@@ -1122,6 +1122,11 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     dailyPnl: acc.dailyPnl + cam.dailyPnl,
     flags: acc.flags + cam.flags,
   }), { clients: 0, accounts: 0, weeklyPnl: 0, dailyPnl: 0, flags: 0 }), [cams]);
+  // Clients not owned by any CAM profile (e.g. after a CAM is deleted) — need reassignment.
+  const unassignedClients = useMemo(() => {
+    const assigned = new Set((camProfiles || []).flatMap(p => p.clientIds || []));
+    return clients.filter(c => !assigned.has(c.id));
+  }, [clients, camProfiles]);
 
   const strategies = useMemo(() => buildStrategyAnalyzer(clients), [clients]);
   const strategyEffectiveness = useMemo(() => buildStrategyEffectiveness(clients), [clients]);
@@ -1359,6 +1364,17 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             </div>
           )}
         </div>
+
+        {unassignedClients.length > 0 && (
+          <div className="unassigned-banner" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',margin:'0 0 12px',borderRadius:10,border:'1px solid var(--negative)',background:'color-mix(in srgb, var(--negative) 8%, transparent)'}}>
+            <AlertTriangle size={16} className="negative" />
+            <span style={{flex:1,fontSize:13}}>
+              <strong className="negative">{unassignedClients.length} client{unassignedClients.length !== 1 ? 's' : ''} unassigned</strong>
+              {' '}— no CAM assigned. Reassign in the Client roster below.
+              <span className="muted"> ({unassignedClients.slice(0, 5).map(c => c.name).join(', ')}{unassignedClients.length > 5 ? `, +${unassignedClients.length - 5} more` : ''})</span>
+            </span>
+          </div>
+        )}
 
         {teamAnnouncement && (
           <div className="team-announcement-banner">
