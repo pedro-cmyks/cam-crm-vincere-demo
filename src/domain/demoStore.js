@@ -437,6 +437,14 @@ export function addCamProfile(state, name) {
   };
 }
 
+export function deleteCamProfile(state, profileId) {
+  if (!profileId) return state;
+  return {
+    ...state,
+    camProfiles: (state.camProfiles || []).filter((p) => p.id !== profileId),
+  };
+}
+
 export function selectCam(state, camId) {
   const profile = (state.camProfiles || []).find((cam) => cam.id === camId);
   const firstClientId = profile?.clientIds?.[0] || null;

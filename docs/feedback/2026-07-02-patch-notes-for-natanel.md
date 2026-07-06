@@ -55,8 +55,9 @@ Files touched: `src/App.jsx` (CredentialsTab + contact card),
 - Field labels clarified: "VPS username" / "VPS password".
 
 ### 3. New: Prop firms section (multiple per client)
-- New data shape: **`client.propFirms: Array<{ id, connection, login, password }>`**
-  where `connection` is a toggle of **`Tradovate` | `Rithmic`** (`PROP_FIRM_CONNECTIONS`).
+- New data shape: **`client.propFirms: Array<{ id, name, connection, login, password }>`**
+  where `name` is the prop firm (e.g. Apex, TopStep) and `connection` is a toggle
+  of **`Tradovate` | `Rithmic`** (`PROP_FIRM_CONNECTIONS`).
 - Add / remove multiple prop firms per client.
 - **DB implication:** a client → many prop firms (e.g. a `prop_firms` table with
   `client_id` FK, `connection` enum, `login`, `password_encrypted`). Same for
@@ -79,23 +80,38 @@ Files touched: `src/App.jsx` (CredentialsTab + contact card),
   message templates) — those are client-facing messages where emoji are expected.
   A handful of other in-app button emojis remain and can be swept next.
 
-### 6. Users & Access — auto-create CAM profile when adding a CAM user
-**Problem reported (deployed build):** the "Add user" form only lets you pick an
-**existing** CAM profile, so a brand-new CAM can't get their own profile and
-never shows up in the sidebar / CAM overview.
+### 6. Users & Access — CAM profile as a toggle + deactivate/delete (deployed build)
+This targets the **deployed** Users & Access screen + left sidebar (your build —
+the GitHub demo's manager sidebar shows clients and users have no status field,
+so most of this is a spec for you; the delete fix below is done in the reference).
 
-**Clarification — keep the CAM profile, it is not redundant with the role:**
-- `role` (Manager / CAM) = **permissions**.
-- `cam_profiles` = the CAM's **identity that owns a client roster**
-  (clients attach to a profile via `client_assignments` in the ERD; the sidebar,
-  CAM overview, performance metrics, payout pipeline all key off it).
+**Keep role and CAM profile as distinct concepts:**
+- `role` (Manager / CAM) = **permissions**. Correct as-is.
+- **CAM profile** = whether this person is an **active, client-carrying CAM shown
+  in the left sidebar**.
 
-**Fix (reference):** when creating a user with role **CAM and no profile
-selected**, auto-create a `cam_profile` named after the user and link it
-(`users.cam_profile_id`). Now every new CAM immediately has a roster and appears
-correctly. (`submitNewUser` → routes through the CAM-creation path; the profile
-role is normalized to `CAM`.) A "+ New profile" option in the dropdown would work
-too. **Do not drop the CAM-profile concept** — it's in the agreed schema.
+**Change the "CAM profile" column from a name-dropdown to a Yes/No toggle** (per
+user):
+- **CAM profile = ON (true):** the profile shows in the **left sidebar** and
+  **clients can be assigned to it**. (If none exists yet, create it — named after
+  the user. This replaces the old "pick an existing profile" dropdown that blocked
+  creating new CAMs.)
+- **CAM profile = OFF (false):** not shown in the sidebar, cannot be assigned
+  clients.
+
+**Employee status (Active / Inactive), separate from the toggle:**
+- **Deactivate** an employee → **hide from the left sidebar**, but **keep them in
+  the Users list flagged as `Inactive`** (they are not gone, just not active).
+- **Delete** an employee → remove **everywhere** (user account **and** their CAM
+  profile / sidebar entry). Bug reported: deleting a user left them in the sidebar
+  because only the login was removed, not the `cam_profile`.
+
+**Fix done in the reference repo:** deleting a CAM user now also deletes their
+linked `cam_profile` (`deleteCamProfile` + `handleDeleteUser`); if that CAM still
+has assigned clients, the manager is warned they'll be left unassigned to
+reassign afterward. New model to mirror in the DB: a `cam_profile` row with an
+`active`/`is_sidebar` boolean (the toggle) and an employee `status`
+(active/inactive); delete cascades user → cam_profile → assignments cleanup.
 
 **Verification:** `npm test` → 334 passing; `vite build` clean; no new lint errors.
 

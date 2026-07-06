@@ -42,6 +42,7 @@ import {
   transferClient,
   togglePinClient,
   addCamProfile,
+  deleteCamProfile,
   addTask,
   appendDailyImport,
   createDemoState,
@@ -1084,7 +1085,7 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join('\n');
 }
 
-function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
+function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onDeleteCamProfile, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
   const [newCamName, setNewCamName] = useState('');
   const [newCamUsername, setNewCamUsername] = useState('');
   const [newCamPassword, setNewCamPassword] = useState('');
@@ -1191,6 +1192,22 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
       onUsersChange(addUser(users, newUser));
     }
     setNewUser({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
+  }
+
+  function handleDeleteUser(u) {
+    if (u.role === USER_ROLES.MANAGER) return;
+    const profile = u.camProfileId ? camProfiles.find(p => p.id === u.camProfileId) : null;
+    const clientCount = profile?.clientIds?.length || 0;
+    let msg = `Delete user "${u.displayName}"?`;
+    if (profile) {
+      msg += `\n\nThis also removes their CAM profile "${profile.name}"`;
+      msg += clientCount
+        ? ` and leaves ${clientCount} client${clientCount > 1 ? 's' : ''} unassigned (reassign them to another CAM afterward).`
+        : '.';
+    }
+    if (!window.confirm(msg)) return;
+    onUsersChange(deleteUser(users, u.id));
+    if (profile) onDeleteCamProfile?.(profile.id);
   }
 
   function saveUserEdit(userId) {
@@ -2111,7 +2128,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                           ) : (
                             <>
                               <button className="ghost-button" title="Edit" onClick={() => { setEditUserId(u.id); setEditUserPatch({}); }}><Edit3 size={13} /></button>
-                              <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user" onClick={() => { if(window.confirm(`Delete user "${u.displayName}"?`)) onUsersChange(deleteUser(users, u.id)); }}>
+                              <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user" onClick={() => handleDeleteUser(u)}>
                                 <Trash2 size={13} />
                               </button>
                             </>
@@ -4257,7 +4274,7 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
     updateProfile({ additionalEmails: additionalEmails.filter((e) => e !== email) });
   }
   function addPropFirm() {
-    onUpdateClient({ propFirms: [...propFirms, { id: `pf-${Date.now()}`, connection: 'Tradovate', login: '', password: '' }] });
+    onUpdateClient({ propFirms: [...propFirms, { id: `pf-${Date.now()}`, name: '', connection: 'Tradovate', login: '', password: '' }] });
   }
   function updatePropFirm(id, patch) {
     onUpdateClient({ propFirms: propFirms.map((pf) => (pf.id === id ? { ...pf, ...patch } : pf)) });
@@ -4382,6 +4399,7 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
           <div className="prop-firm-list" style={{display:'flex',flexDirection:'column',gap:12}}>
             {propFirms.map((pf) => (
               <div key={pf.id} className="prop-firm-row form-grid" style={{alignItems:'end'}}>
+                <label>Prop firm<input value={pf.name || ''} placeholder="e.g. Apex, TopStep" onChange={(e) => updatePropFirm(pf.id, { name: e.target.value })} /></label>
                 <label>Connection
                   <select value={pf.connection || 'Tradovate'} onChange={(e) => updatePropFirm(pf.id, { connection: e.target.value })}>
                     {PROP_FIRM_CONNECTIONS.map((c) => <option key={c}>{c}</option>)}
@@ -4981,6 +4999,7 @@ export default function App() {
             if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, ...extra, camProfileId: profileId }));
           }
         }}
+        onDeleteCamProfile={(profileId) => setState((current) => deleteCamProfile(current, profileId))}
         onLogout={() => persistSession(null)}
         users={users}
         onUsersChange={setUsers}
