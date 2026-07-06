@@ -80,10 +80,10 @@ Files touched: `src/App.jsx` (CredentialsTab + contact card),
   message templates) — those are client-facing messages where emoji are expected.
   A handful of other in-app button emojis remain and can be swept next.
 
-### 6. Users & Access — CAM profile as a toggle + deactivate/delete (deployed build)
-This targets the **deployed** Users & Access screen + left sidebar (your build —
-the GitHub demo's manager sidebar shows clients and users have no status field,
-so most of this is a spec for you; the delete fix below is done in the reference).
+### 6. Users & Access — CAM profile as a toggle + deactivate/delete (implemented)
+Implemented and working in the reference repo (pull from GitHub). Data model:
+`users` now carry a `status` (`Active` | `Inactive`); the "CAM profile" link is
+toggled on/off per user.
 
 **Keep role and CAM profile as distinct concepts:**
 - `role` (Manager / CAM) = **permissions**. Correct as-is.
@@ -106,12 +106,24 @@ user):
   profile / sidebar entry). Bug reported: deleting a user left them in the sidebar
   because only the login was removed, not the `cam_profile`.
 
-**Fix done in the reference repo:** deleting a CAM user now also deletes their
-linked `cam_profile` (`deleteCamProfile` + `handleDeleteUser`); if that CAM still
-has assigned clients, the manager is warned they'll be left unassigned to
-reassign afterward. New model to mirror in the DB: a `cam_profile` row with an
-`active`/`is_sidebar` boolean (the toggle) and an employee `status`
-(active/inactive); delete cascades user → cam_profile → assignments cleanup.
+**Implemented in the reference (`src/App.jsx`, `src/domain/userStore.js`,
+`src/domain/demoStore.js`):**
+- **CAM profile = Yes/No toggle** in the Users table (was a name dropdown).
+  Toggle ON creates a `cam_profile` (named after the user) and links it; toggle
+  OFF deletes the profile and unlinks (warns if it still has clients). Managers
+  show `—` (no CAM profile).
+- **Status = Active/Inactive toggle.** Inactive users are **filtered out of the
+  CAM roster/sidebar** (`cams` memo) but **stay in the Users list**, dimmed and
+  badged `Inactive`.
+- **Delete removes everywhere:** deleting a CAM user also deletes their
+  `cam_profile` (`deleteCamProfile` + `handleDeleteUser`), warning if clients
+  would be left unassigned.
+
+**DB model to mirror:** `cam_profiles` linked 1:1 to a CAM `user`
+(`users.cam_profile_id`); the toggle = create/remove that row (it drives sidebar
+visibility + client assignment eligibility); `users.status` = active/inactive
+(inactive hides from sidebar, stays listed); delete cascades user → cam_profile →
+`client_assignments` cleanup.
 
 **Verification:** `npm test` → 334 passing; `vite build` clean; no new lint errors.
 

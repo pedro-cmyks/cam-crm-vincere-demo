@@ -1085,7 +1085,7 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join('\n');
 }
 
-function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onDeleteCamProfile, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
+function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onDeleteCamProfile, onToggleCamProfile, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
   const [newCamName, setNewCamName] = useState('');
   const [newCamUsername, setNewCamUsername] = useState('');
   const [newCamPassword, setNewCamPassword] = useState('');
@@ -1105,10 +1105,16 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
   const [managerSearch, setManagerSearch] = useState('');
   const teamHistory = useMemo(() => buildTeamHistory(clients).slice(-10), [clients]);
-  const cams = useMemo(() => (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
-    const summary = buildManagerSummary(clientsForCam(clients, profile));
-    return { ...profile, ...summary, flags: summary.openFlags };
-  }), [clients, camProfiles]);
+  const cams = useMemo(() => {
+    // Hide CAMs whose linked user is deactivated (Inactive) from the roster/sidebar.
+    const inactiveProfileIds = new Set((users || []).filter(u => u.status === 'Inactive' && u.camProfileId).map(u => u.camProfileId));
+    return (camProfiles.length ? camProfiles : createDemoState().camProfiles)
+      .filter((profile) => !inactiveProfileIds.has(profile.id))
+      .map((profile) => {
+        const summary = buildManagerSummary(clientsForCam(clients, profile));
+        return { ...profile, ...summary, flags: summary.openFlags };
+      });
+  }, [clients, camProfiles, users]);
   const totals = useMemo(() => cams.reduce((acc, cam) => ({
     clients: acc.clients + cam.clients,
     accounts: acc.accounts + cam.accounts,
@@ -1208,6 +1214,20 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     if (!window.confirm(msg)) return;
     onUsersChange(deleteUser(users, u.id));
     if (profile) onDeleteCamProfile?.(profile.id);
+  }
+
+  function handleToggleCamProfile(u) {
+    if (u.role === USER_ROLES.MANAGER) return;
+    if (u.camProfileId) {
+      const profile = camProfiles.find(p => p.id === u.camProfileId);
+      const clientCount = profile?.clientIds?.length || 0;
+      if (clientCount && !window.confirm(`Turn off CAM profile for "${u.displayName}"? ${clientCount} client${clientCount > 1 ? 's' : ''} will be left unassigned.`)) return;
+    }
+    onToggleCamProfile?.(u);
+  }
+
+  function handleToggleStatus(u) {
+    onUsersChange(updateUser(users, u.id, { status: u.status === 'Inactive' ? 'Active' : 'Inactive' }));
   }
 
   function saveUserEdit(userId) {
@@ -2101,12 +2121,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
             <div className="table-wrap">
               <table className="ops-table">
-                <thead><tr><th>Display name</th><th>Username</th><th>Email</th><th>Role</th><th>CAM profile</th><th>Password</th><th></th></tr></thead>
+                <thead><tr><th>Display name</th><th>Username</th><th>Email</th><th>Role</th><th>CAM profile</th><th>Status</th><th>Password</th><th></th></tr></thead>
                 <tbody>
                   {users.map((u) => {
                     const isEditing = editUserId === u.id;
+                    const isInactive = u.status === 'Inactive';
                     return (
-                      <tr key={u.id}>
+                      <tr key={u.id} style={isInactive ? { opacity: 0.55 } : undefined}>
                         <td>{u.displayName}</td>
                         <td><code>{u.username}</code></td>
                         <td>{isEditing
@@ -2114,7 +2135,24 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                           : <span className="muted">{u.email || '—'}</span>}
                         </td>
                         <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
-                        <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
+                        <td>{u.role === USER_ROLES.MANAGER
+                          ? <span className="muted">—</span>
+                          : <button
+                              className={`badge ${u.camProfileId ? 'success' : 'muted'}`}
+                              style={{cursor:'pointer',border:'none'}}
+                              title={u.camProfileId ? 'CAM profile on — shows in sidebar, can hold clients. Click to turn off.' : 'CAM profile off. Click to turn on.'}
+                              onClick={() => handleToggleCamProfile(u)}
+                            >{u.camProfileId ? 'Yes' : 'No'}</button>}
+                        </td>
+                        <td>
+                          <button
+                            className={`badge ${isInactive ? 'muted' : 'success'}`}
+                            style={{cursor:'pointer',border:'none'}}
+                            disabled={u.role === USER_ROLES.MANAGER}
+                            title={isInactive ? 'Inactive — hidden from sidebar. Click to activate.' : 'Active. Click to deactivate.'}
+                            onClick={() => handleToggleStatus(u)}
+                          >{isInactive ? 'Inactive' : 'Active'}</button>
+                        </td>
                         <td>{isEditing
                           ? <input style={{width:130}} type="password" value={editUserPatch.password ?? ''} onChange={e => setEditUserPatch(p => ({...p, password: e.target.value}))} placeholder="New password" autoComplete="new-password" />
                           : <span className="muted">••••••</span>}
@@ -5000,6 +5038,16 @@ export default function App() {
           }
         }}
         onDeleteCamProfile={(profileId) => setState((current) => deleteCamProfile(current, profileId))}
+        onToggleCamProfile={(u) => {
+          if (u.camProfileId) {
+            setState((current) => deleteCamProfile(current, u.camProfileId));
+            setUsers((list) => updateUser(list, u.id, { camProfileId: null }));
+          } else {
+            const profileId = `am-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+            setState((current) => ({ ...current, camProfiles: [...(current.camProfiles || []), { id: profileId, name: u.displayName, status: 'Active', role: 'CAM', live: true, clientIds: [] }] }));
+            setUsers((list) => updateUser(list, u.id, { camProfileId: profileId }));
+          }
+        }}
         onLogout={() => persistSession(null)}
         users={users}
         onUsersChange={setUsers}
