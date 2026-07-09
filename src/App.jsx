@@ -8,12 +8,20 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Copy,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   FileText,
+  Globe,
+  KeyRound,
   Lock,
   LogOut,
+  Mail,
+  MessageCircle,
+  Phone,
   Plus,
   RefreshCw,
   Shield,
@@ -34,6 +42,7 @@ import {
   transferClient,
   togglePinClient,
   addCamProfile,
+  deleteCamProfile,
   addTask,
   appendDailyImport,
   createDemoState,
@@ -1076,7 +1085,7 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join('\n');
 }
 
-function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
+function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onDeleteCamProfile, onToggleCamProfile, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
   const [newCamName, setNewCamName] = useState('');
   const [newCamUsername, setNewCamUsername] = useState('');
   const [newCamPassword, setNewCamPassword] = useState('');
@@ -1096,10 +1105,16 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
   const [managerSearch, setManagerSearch] = useState('');
   const teamHistory = useMemo(() => buildTeamHistory(clients).slice(-10), [clients]);
-  const cams = useMemo(() => (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
-    const summary = buildManagerSummary(clientsForCam(clients, profile));
-    return { ...profile, ...summary, flags: summary.openFlags };
-  }), [clients, camProfiles]);
+  const cams = useMemo(() => {
+    // Hide CAMs whose linked user is deactivated (Inactive) from the roster/sidebar.
+    const inactiveProfileIds = new Set((users || []).filter(u => u.status === 'Inactive' && u.camProfileId).map(u => u.camProfileId));
+    return (camProfiles.length ? camProfiles : createDemoState().camProfiles)
+      .filter((profile) => !inactiveProfileIds.has(profile.id))
+      .map((profile) => {
+        const summary = buildManagerSummary(clientsForCam(clients, profile));
+        return { ...profile, ...summary, flags: summary.openFlags };
+      });
+  }, [clients, camProfiles, users]);
   const totals = useMemo(() => cams.reduce((acc, cam) => ({
     clients: acc.clients + cam.clients,
     accounts: acc.accounts + cam.accounts,
@@ -1107,6 +1122,11 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     dailyPnl: acc.dailyPnl + cam.dailyPnl,
     flags: acc.flags + cam.flags,
   }), { clients: 0, accounts: 0, weeklyPnl: 0, dailyPnl: 0, flags: 0 }), [cams]);
+  // Clients not owned by any CAM profile (e.g. after a CAM is deleted) — need reassignment.
+  const unassignedClients = useMemo(() => {
+    const assigned = new Set((camProfiles || []).flatMap(p => p.clientIds || []));
+    return clients.filter(c => !assigned.has(c.id));
+  }, [clients, camProfiles]);
 
   const strategies = useMemo(() => buildStrategyAnalyzer(clients), [clients]);
   const strategyEffectiveness = useMemo(() => buildStrategyEffectiveness(clients), [clients]);
@@ -1175,8 +1195,44 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     if (!newUser.username || !newUser.password || !newUser.displayName) return;
     const isDuplicate = (users || []).some(u => u.username?.toLowerCase() === newUser.username.toLowerCase());
     if (isDuplicate) { alert(`Username "${newUser.username}" is already taken. Choose a different username.`); return; }
-    onUsersChange(addUser(users, newUser));
+    if (newUser.role === USER_ROLES.CAM && !newUser.camProfileId) {
+      // No profile picked for a CAM: auto-create one (named after the user) so the
+      // new CAM gets their own client roster and shows up in the sidebar/overview.
+      onCreateCam(newUser.displayName.trim(), newUser.username.trim(), newUser.password, { email: newUser.email });
+    } else {
+      onUsersChange(addUser(users, newUser));
+    }
     setNewUser({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
+  }
+
+  function handleDeleteUser(u) {
+    if (u.role === USER_ROLES.MANAGER) return;
+    const profile = u.camProfileId ? camProfiles.find(p => p.id === u.camProfileId) : null;
+    const clientCount = profile?.clientIds?.length || 0;
+    let msg = `Delete user "${u.displayName}"?`;
+    if (profile) {
+      msg += `\n\nThis also removes their CAM profile "${profile.name}"`;
+      msg += clientCount
+        ? ` and leaves ${clientCount} client${clientCount > 1 ? 's' : ''} unassigned (reassign them to another CAM afterward).`
+        : '.';
+    }
+    if (!window.confirm(msg)) return;
+    onUsersChange(deleteUser(users, u.id));
+    if (profile) onDeleteCamProfile?.(profile.id);
+  }
+
+  function handleToggleCamProfile(u) {
+    if (u.role === USER_ROLES.MANAGER) return;
+    if (u.camProfileId) {
+      const profile = camProfiles.find(p => p.id === u.camProfileId);
+      const clientCount = profile?.clientIds?.length || 0;
+      if (clientCount && !window.confirm(`Turn off CAM profile for "${u.displayName}"? ${clientCount} client${clientCount > 1 ? 's' : ''} will be left unassigned.`)) return;
+    }
+    onToggleCamProfile?.(u);
+  }
+
+  function handleToggleStatus(u) {
+    onUsersChange(updateUser(users, u.id, { status: u.status === 'Inactive' ? 'Active' : 'Inactive' }));
   }
 
   function saveUserEdit(userId) {
@@ -1308,6 +1364,17 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             </div>
           )}
         </div>
+
+        {unassignedClients.length > 0 && (
+          <div className="unassigned-banner" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',margin:'0 0 12px',borderRadius:10,border:'1px solid var(--negative)',background:'color-mix(in srgb, var(--negative) 8%, transparent)'}}>
+            <AlertTriangle size={16} className="negative" />
+            <span style={{flex:1,fontSize:13}}>
+              <strong className="negative">{unassignedClients.length} client{unassignedClients.length !== 1 ? 's' : ''} unassigned</strong>
+              {' '}— no CAM assigned. Reassign in the Client roster below.
+              <span className="muted"> ({unassignedClients.slice(0, 5).map(c => c.name).join(', ')}{unassignedClients.length > 5 ? `, +${unassignedClients.length - 5} more` : ''})</span>
+            </span>
+          </div>
+        )}
 
         {teamAnnouncement && (
           <div className="team-announcement-banner">
@@ -2070,12 +2137,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
             <div className="table-wrap">
               <table className="ops-table">
-                <thead><tr><th>Display name</th><th>Username</th><th>Email</th><th>Role</th><th>CAM profile</th><th>Password</th><th></th></tr></thead>
+                <thead><tr><th>Display name</th><th>Username</th><th>Email</th><th>Role</th><th>CAM profile</th><th>Status</th><th>Password</th><th></th></tr></thead>
                 <tbody>
                   {users.map((u) => {
                     const isEditing = editUserId === u.id;
+                    const isInactive = u.status === 'Inactive';
                     return (
-                      <tr key={u.id}>
+                      <tr key={u.id} style={isInactive ? { opacity: 0.55 } : undefined}>
                         <td>{u.displayName}</td>
                         <td><code>{u.username}</code></td>
                         <td>{isEditing
@@ -2083,7 +2151,24 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                           : <span className="muted">{u.email || '—'}</span>}
                         </td>
                         <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
-                        <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
+                        <td>{u.role === USER_ROLES.MANAGER
+                          ? <span className="muted">—</span>
+                          : <button
+                              className={`badge ${u.camProfileId ? 'success' : 'muted'}`}
+                              style={{cursor:'pointer',border:'none'}}
+                              title={u.camProfileId ? 'CAM profile on — shows in sidebar, can hold clients. Click to turn off.' : 'CAM profile off. Click to turn on.'}
+                              onClick={() => handleToggleCamProfile(u)}
+                            >{u.camProfileId ? 'Yes' : 'No'}</button>}
+                        </td>
+                        <td>
+                          <button
+                            className={`badge ${isInactive ? 'muted' : 'success'}`}
+                            style={{cursor:'pointer',border:'none'}}
+                            disabled={u.role === USER_ROLES.MANAGER}
+                            title={isInactive ? 'Inactive — hidden from sidebar. Click to activate.' : 'Active. Click to deactivate.'}
+                            onClick={() => handleToggleStatus(u)}
+                          >{isInactive ? 'Inactive' : 'Active'}</button>
+                        </td>
                         <td>{isEditing
                           ? <input style={{width:130}} type="password" value={editUserPatch.password ?? ''} onChange={e => setEditUserPatch(p => ({...p, password: e.target.value}))} placeholder="New password" autoComplete="new-password" />
                           : <span className="muted">••••••</span>}
@@ -2097,7 +2182,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                           ) : (
                             <>
                               <button className="ghost-button" title="Edit" onClick={() => { setEditUserId(u.id); setEditUserPatch({}); }}><Edit3 size={13} /></button>
-                              <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user" onClick={() => { if(window.confirm(`Delete user "${u.displayName}"?`)) onUsersChange(deleteUser(users, u.id)); }}>
+                              <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user" onClick={() => handleDeleteUser(u)}>
                                 <Trash2 size={13} />
                               </button>
                             </>
@@ -2576,7 +2661,7 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
   const latestRegistry = mergeRegistryCi(dailyImport?.accounts, client?.accountRegistry);
 
   const profile = client.profile || {};
-  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.propFirm || profile.preferredChannel || profile.country;
+  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.preferredChannel || profile.country;
   const waLink = profile.phone ? `https://wa.me/${profile.phone.replace(/\D/g, '')}` : null;
 
   return (
@@ -2584,14 +2669,13 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
       {hasContact && (
         <section className="contact-card">
           {profile.fullName && <strong className="contact-name">{profile.fullName}</strong>}
-          {profile.email && <a href={`mailto:${profile.email}`} className="contact-chip"><span>✉</span>{profile.email}</a>}
-          {profile.phone && <a href={waLink || `tel:${profile.phone}`} target="_blank" rel="noreferrer" className="contact-chip"><span>{waLink ? '📱' : '📞'}</span>{profile.phone}</a>}
-          {profile.messenger && <span className="contact-chip"><span>💬</span>{profile.messenger}</span>}
-          {profile.timezone && <span className="contact-chip muted"><span>🕐</span>{profile.timezone}</span>}
-          {profile.propFirm && <span className="contact-chip muted"><span>🏢</span>{profile.propFirm}</span>}
-          {profile.preferredChannel && <span className="contact-chip muted"><span>💬</span>{profile.preferredChannel}</span>}
-          {profile.country && <span className="contact-chip muted"><span>🌎</span>{profile.country}</span>}
-          {profile.language && <span className="contact-chip muted"><span>🌐</span>{{en:'English',es:'Español'}[profile.language]||profile.language}</span>}
+          {profile.email && <a href={`mailto:${profile.email}`} className="contact-chip"><Mail size={13} />{profile.email}</a>}
+          {profile.phone && <a href={waLink || `tel:${profile.phone}`} target="_blank" rel="noreferrer" className="contact-chip"><Phone size={13} />{profile.phone}</a>}
+          {profile.messenger && <span className="contact-chip"><MessageCircle size={13} />{profile.messenger}</span>}
+          {profile.timezone && <span className="contact-chip muted"><Clock size={13} />{profile.timezone}</span>}
+          {profile.preferredChannel && <span className="contact-chip muted"><MessageCircle size={13} />{profile.preferredChannel}</span>}
+          {profile.country && <span className="contact-chip muted"><Globe size={13} />{profile.country}</span>}
+          {profile.language && <span className="contact-chip muted"><Globe size={13} />{{en:'English',es:'Español'}[profile.language]||profile.language}</span>}
           {profile.stage && profile.stage !== 'Active' && <span className={`client-stage-badge stage-${profile.stage?.toLowerCase().replace(/\s+/g, '-')}`}>{profile.stage}</span>}
         </section>
       )}
@@ -4200,16 +4284,57 @@ function CopyButton({ value }) {
   );
 }
 
+const TIMEZONE_OPTIONS = [
+  'EST (America/New_York)',
+  'CST (America/Chicago)',
+  'MST (America/Denver)',
+  'PST (America/Los_Angeles)',
+  'AKST (America/Anchorage)',
+  'HST (Pacific/Honolulu)',
+  'GMT/UTC (Europe/London)',
+  'CET (Europe/Madrid)',
+  'COT (America/Bogota)',
+];
+
+const COUNTRY_OPTIONS = [
+  'United States', 'Canada', 'Mexico', 'Colombia', 'United Kingdom',
+  'Spain', 'Germany', 'France', 'Italy', 'Brazil', 'Argentina', 'Australia',
+  'India', 'Philippines', 'Nigeria', 'South Africa', 'Other',
+];
+
+const PROP_FIRM_CONNECTIONS = ['Tradovate', 'Rithmic'];
+
 function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
+  const propFirms = client.propFirms || [];
+  const additionalEmails = profile.additionalEmails || [];
   const [showPasswords, setShowPasswords] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
 
   function updateProfile(patch) {
     onUpdateClient({ profile: { ...profile, ...patch } });
   }
   function updateCredentials(patch) {
     onUpdateClient({ credentials: { ...credentials, ...patch } });
+  }
+  function addEmail() {
+    const value = newEmail.trim();
+    if (!value || additionalEmails.includes(value) || value === profile.email) { setNewEmail(''); return; }
+    updateProfile({ additionalEmails: [...additionalEmails, value] });
+    setNewEmail('');
+  }
+  function removeEmail(email) {
+    updateProfile({ additionalEmails: additionalEmails.filter((e) => e !== email) });
+  }
+  function addPropFirm() {
+    onUpdateClient({ propFirms: [...propFirms, { id: `pf-${Date.now()}`, name: '', connection: 'Tradovate', login: '', password: '' }] });
+  }
+  function updatePropFirm(id, patch) {
+    onUpdateClient({ propFirms: propFirms.map((pf) => (pf.id === id ? { ...pf, ...patch } : pf)) });
+  }
+  function removePropFirm(id) {
+    onUpdateClient({ propFirms: propFirms.filter((pf) => pf.id !== id) });
   }
 
   return (
@@ -4221,23 +4346,49 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
           <label>Email
             <div className="input-copy-row">
               <input type="email" value={profile.email || ''} placeholder="client@email.com" onChange={(e) => updateProfile({ email: e.target.value })} />
-              {profile.email && <a className="ghost-button icon-only" href={`mailto:${profile.email}`} title="Send email" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>✉</a>}
+              {profile.email && <a className="ghost-button icon-only" href={`mailto:${profile.email}`} title="Send email" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}><Mail size={14} /></a>}
               <CopyButton value={profile.email} />
             </div>
+          </label>
+          <label>Additional emails
+            <div className="input-copy-row">
+              <input type="email" value={newEmail} placeholder="Add another email" onChange={(e) => setNewEmail(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmail(); } }} />
+              <button type="button" className="ghost-button icon-only" title="Add email" style={{display:'flex',alignItems:'center',padding:'0 6px'}} onClick={addEmail}><Plus size={14} /></button>
+            </div>
+            {additionalEmails.length > 0 && (
+              <div className="email-chips" style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+                {additionalEmails.map((email) => (
+                  <span key={email} className="badge muted" style={{display:'inline-flex',alignItems:'center',gap:4}}>
+                    {email}
+                    <button type="button" className="ghost-button icon-only" title="Remove" style={{padding:0,lineHeight:0}} onClick={() => removeEmail(email)}><Trash2 size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
           </label>
           <label>Phone
             <div className="input-copy-row">
               <input type="tel" value={profile.phone || ''} placeholder="+1 (555) 000-0000" onChange={(e) => updateProfile({ phone: e.target.value })} />
-              {profile.phone && <a className="ghost-button icon-only" href={`tel:${profile.phone}`} title="Call" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>📞</a>}
+              {profile.phone && <a className="ghost-button icon-only" href={`tel:${profile.phone}`} title="Call" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}><Phone size={14} /></a>}
               <CopyButton value={profile.phone} />
             </div>
           </label>
-          <label>Time zone<input value={profile.timezone || ''} placeholder="e.g. America/New_York" onChange={(e) => updateProfile({ timezone: e.target.value })} /></label>
-          <label>Prop firm<input value={profile.propFirm || ''} placeholder="e.g. Apex, TopStep, FTMO" onChange={(e) => updateProfile({ propFirm: e.target.value })} /></label>
-          <label>Discord / Telegram
+          <label>Time zone
+            <select value={profile.timezone || ''} onChange={(e) => updateProfile({ timezone: e.target.value })}>
+              <option value="">— Select —</option>
+              {TIMEZONE_OPTIONS.map((tz) => <option key={tz}>{tz}</option>)}
+            </select>
+          </label>
+          <label>Discord username
             <div className="input-copy-row">
-              <input value={profile.messenger || ''} placeholder="Handle or username" onChange={(e) => updateProfile({ messenger: e.target.value })} />
+              <input value={profile.messenger || ''} placeholder="Discord username" onChange={(e) => updateProfile({ messenger: e.target.value })} />
               <CopyButton value={profile.messenger} />
+            </div>
+          </label>
+          <label>Product key
+            <div className="input-copy-row">
+              <input value={profile.productKey || ''} placeholder="NinjaTrader product key" onChange={(e) => updateProfile({ productKey: e.target.value })} />
+              <CopyButton value={profile.productKey} />
             </div>
           </label>
           <label>Client stage
@@ -4253,7 +4404,6 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
             <select value={profile.preferredChannel || ''} onChange={(e) => updateProfile({ preferredChannel: e.target.value })}>
               <option value="">— Not set —</option>
               <option>WhatsApp</option>
-              <option>Telegram</option>
               <option>Email</option>
               <option>Discord</option>
               <option>Other</option>
@@ -4266,7 +4416,12 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
               <option value="es">Español</option>
             </select>
           </label>
-          <label>Country<input value={profile.country || ''} placeholder="e.g. Colombia, USA" onChange={(e) => updateProfile({ country: e.target.value })} /></label>
+          <label>Country
+            <input list="country-options" value={profile.country || ''} placeholder="Start typing…" onChange={(e) => updateProfile({ country: e.target.value })} />
+            <datalist id="country-options">
+              {COUNTRY_OPTIONS.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </label>
           <label>Start date<input type="date" value={profile.startDate || ''} onChange={(e) => updateProfile({ startDate: e.target.value })} /></label>
         </div>
       </section>
@@ -4274,18 +4429,43 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
       <section className="panel">
         <div className="panel-heading">
           <h3>VPS / Platform access</h3><Lock size={16} />
-          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12}} onClick={() => setShowPasswords(v => !v)}>
-            {showPasswords ? '🙈 Hide passwords' : '👁 Show passwords'}
+          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12,display:'inline-flex',alignItems:'center',gap:4}} onClick={() => setShowPasswords(v => !v)}>
+            {showPasswords ? <><EyeOff size={14} /> Hide passwords</> : <><Eye size={14} /> Show passwords</>}
           </button>
         </div>
         <div className="form-grid">
           <label>VPS IP<div className="input-copy-row"><input value={credentials.ip || ''} onChange={(e) => updateCredentials({ ip: e.target.value })} /><CopyButton value={credentials.ip} /></div></label>
-          <label>Username<div className="input-copy-row"><input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /><CopyButton value={credentials.username} /></div></label>
-          <label>Password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /><CopyButton value={credentials.password} /></div></label>
-          <label>NT login<div className="input-copy-row"><input value={credentials.ntLogin || ''} placeholder="NinjaTrader username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /><CopyButton value={credentials.ntLogin} /></div></label>
-          <label>Prop firm login<div className="input-copy-row"><input value={credentials.firmLogin || ''} placeholder="Dashboard login email" onChange={(e) => updateCredentials({ firmLogin: e.target.value })} /><CopyButton value={credentials.firmLogin} /></div></label>
-          <label>Prop firm password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /><CopyButton value={credentials.firmPassword} /></div></label>
+          <label>VPS username<div className="input-copy-row"><input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /><CopyButton value={credentials.username} /></div></label>
+          <label>VPS password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /><CopyButton value={credentials.password} /></div></label>
+          <label>NinjaTrader username<div className="input-copy-row"><input value={credentials.ntLogin || ''} placeholder="NT8 username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /><CopyButton value={credentials.ntLogin} /></div></label>
+          <label>NinjaTrader password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.ntPassword || ''} placeholder="NT8 password" onChange={(e) => updateCredentials({ ntPassword: e.target.value })} /><CopyButton value={credentials.ntPassword} /></div></label>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Prop firms</h3><KeyRound size={16} />
+          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12,display:'inline-flex',alignItems:'center',gap:4}} onClick={addPropFirm}><Plus size={14} /> Add prop firm</button>
+        </div>
+        {propFirms.length === 0 ? (
+          <p className="muted" style={{padding:'4px 0',fontSize:13}}>No prop firms yet. A client can have multiple — add one to store its connection type and login.</p>
+        ) : (
+          <div className="prop-firm-list" style={{display:'flex',flexDirection:'column',gap:12}}>
+            {propFirms.map((pf) => (
+              <div key={pf.id} className="prop-firm-row form-grid" style={{alignItems:'end'}}>
+                <label>Prop firm<input value={pf.name || ''} placeholder="e.g. Apex, TopStep" onChange={(e) => updatePropFirm(pf.id, { name: e.target.value })} /></label>
+                <label>Connection
+                  <select value={pf.connection || 'Tradovate'} onChange={(e) => updatePropFirm(pf.id, { connection: e.target.value })}>
+                    {PROP_FIRM_CONNECTIONS.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label>Login<div className="input-copy-row"><input value={pf.login || ''} placeholder="Prop firm login / email" onChange={(e) => updatePropFirm(pf.id, { login: e.target.value })} /><CopyButton value={pf.login} /></div></label>
+                <label>Password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={pf.password || ''} onChange={(e) => updatePropFirm(pf.id, { password: e.target.value })} /><CopyButton value={pf.password} /></div></label>
+                <button className="ghost-button icon-only" title="Remove prop firm" style={{display:'flex',alignItems:'center',padding:'0 6px'}} onClick={() => removePropFirm(pf.id)}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="panel">
@@ -4862,15 +5042,26 @@ export default function App() {
         camProfiles={state.camProfiles}
         onOpenCam={openCamWorkspace}
         onLoadDemo={() => setState(createDemoState())}
-        onCreateCam={(name, username, password) => {
+        onCreateCam={(name, username, password, extra = {}) => {
           const profileId = `am-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
           setState((current) => {
-            const profile = { id: profileId, name, status: 'Active', role: 'Account Manager', clientIds: [] };
+            const profile = { id: profileId, name, status: 'Active', role: 'CAM', live: true, clientIds: [] };
             return { ...current, camProfiles: [...(current.camProfiles || []), profile] };
           });
           if (username && password) {
             const already = (users || []).find(u => u.username?.toLowerCase() === username.toLowerCase());
-            if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, camProfileId: profileId }));
+            if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, ...extra, camProfileId: profileId }));
+          }
+        }}
+        onDeleteCamProfile={(profileId) => setState((current) => deleteCamProfile(current, profileId))}
+        onToggleCamProfile={(u) => {
+          if (u.camProfileId) {
+            setState((current) => deleteCamProfile(current, u.camProfileId));
+            setUsers((list) => updateUser(list, u.id, { camProfileId: null }));
+          } else {
+            const profileId = `am-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+            setState((current) => ({ ...current, camProfiles: [...(current.camProfiles || []), { id: profileId, name: u.displayName, status: 'Active', role: 'CAM', live: true, clientIds: [] }] }));
+            setUsers((list) => updateUser(list, u.id, { camProfileId: profileId }));
           }
         }}
         onLogout={() => persistSession(null)}

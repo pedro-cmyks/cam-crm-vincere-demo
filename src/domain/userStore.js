@@ -6,12 +6,12 @@ export const USER_ROLES = {
 };
 
 const DEFAULT_USERS = [
-  { id: 'user-manager', username: 'manager', password: 'demo', role: USER_ROLES.MANAGER, displayName: 'Manager', email: 'manager@vinceretrading.com', camProfileId: null },
-  { id: 'user-pedro', username: 'pedro', password: 'pedro123', role: USER_ROLES.CAM, displayName: 'Pedro', email: 'pedro@vinceretrading.com', camProfileId: 'am-pedro' },
-  { id: 'user-amanda', username: 'amanda', password: 'amanda123', role: USER_ROLES.CAM, displayName: 'Amanda', email: 'amanda@vinceretrading.com', camProfileId: 'am-amanda' },
-  { id: 'user-juan', username: 'juan', password: 'juan123', role: USER_ROLES.CAM, displayName: 'Juan Pablo', email: 'juan@vinceretrading.com', camProfileId: 'am-juan' },
-  { id: 'user-ed', username: 'ed', password: 'ed123', role: USER_ROLES.CAM, displayName: 'Ed', email: 'ed@vinceretrading.com', camProfileId: 'am-ed' },
-  { id: 'user-sarah', username: 'sarah', password: 'sarah123', role: USER_ROLES.CAM, displayName: 'Sarah', email: 'sarah@vinceretrading.com', camProfileId: 'am-sarah' },
+  { id: 'user-manager', username: 'manager', password: 'demo', role: USER_ROLES.MANAGER, displayName: 'Manager', email: 'manager@vinceretrading.com', camProfileId: null, status: 'Active' },
+  { id: 'user-pedro', username: 'pedro', password: 'pedro123', role: USER_ROLES.CAM, displayName: 'Pedro', email: 'pedro@vinceretrading.com', camProfileId: 'am-pedro', status: 'Active' },
+  { id: 'user-amanda', username: 'amanda', password: 'amanda123', role: USER_ROLES.CAM, displayName: 'Amanda', email: 'amanda@vinceretrading.com', camProfileId: 'am-amanda', status: 'Active' },
+  { id: 'user-juan', username: 'juan', password: 'juan123', role: USER_ROLES.CAM, displayName: 'Juan Pablo', email: 'juan@vinceretrading.com', camProfileId: 'am-juan', status: 'Active' },
+  { id: 'user-ed', username: 'ed', password: 'ed123', role: USER_ROLES.CAM, displayName: 'Ed', email: 'ed@vinceretrading.com', camProfileId: 'am-ed', status: 'Active' },
+  { id: 'user-sarah', username: 'sarah', password: 'sarah123', role: USER_ROLES.CAM, displayName: 'Sarah', email: 'sarah@vinceretrading.com', camProfileId: 'am-sarah', status: 'Active' },
 ];
 
 export function loadUsers() {
@@ -48,7 +48,7 @@ export function addUser(users, userData) {
   const duplicate = users.some(u => u.username.toLowerCase() === userData.username.toLowerCase());
   if (duplicate) return users;
   const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  return [...users, { ...userData, id }];
+  return [...users, { status: 'Active', ...userData, id }];
 }
 
 export function updateUser(users, userId, patch) {
